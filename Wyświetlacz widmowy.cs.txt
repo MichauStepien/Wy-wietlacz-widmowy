@@ -1,0 +1,348 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using Wyœwietlacz_widmowy.Properties;
+
+namespace Wyœwietlacz_widmowy
+{
+    public partial class Form1 : Form
+    {
+        Timer t = new Timer(); 
+        Bitmap oryginal;
+        Bitmap glob;
+        Bitmap bmp2;
+        int mode = 1;
+        int W_skali, Radius, cx,cy,u=0;
+        int tx, ty, lim = 10;
+        int N_diod=30; //domyœlnie 30 diod
+        int diode_offset = 10;
+
+        
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox2_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            if (glob != null) //jesli wybrano i za³adowano zdjêcie
+            { convertBitmap2txt(); }
+            else { MessageBox.Show("Prosze wybraæ zdjêcie - Menu -> Open"); }
+        }
+
+        private void radioButton1_CheckedChanged(object sender, EventArgs e)
+        {
+            t.Stop();
+            if (oryginal != null && radioButton1.Checked == true)
+            {
+                pictureBox1.Size = new Size(oryginal.Width, oryginal.Height);
+                glob = (Bitmap)oryginal.Clone();
+                pictureBox1.Image = glob;
+            }
+            
+        }
+
+        private void radioButton2_CheckedChanged(object sender, EventArgs e)
+        {
+            if (radioButton2.Checked == true)
+            {
+                t.Start();
+            }
+
+            
+        }
+
+        private void radioButton3_CheckedChanged(object sender, EventArgs e)
+        {
+            t.Stop();
+            if (bmp2 != null && radioButton3.Checked == true)
+            {
+                pictureBox1.BackColor = Color.Black;
+                pictureBox1.Size = new Size(bmp2.Width, bmp2.Height);
+                pictureBox1.Image = bmp2;
+            }
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            if (pictureBox1.Image != null)
+            {
+                SaveFileDialog save_file = new SaveFileDialog();
+                if (save_file.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                pictureBox1.Image.Save(save_file.FileName);
+            }
+        }
+
+        private void rGBToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            mode = 1;
+        }
+
+        private void rToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            mode = 2;
+        }
+
+        private void gToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            mode = 3;
+        }
+
+        private void bToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            mode = 4;
+        }
+
+        public Form1()
+        {
+            InitializeComponent();
+            t.Interval = 5;
+            t.Tick += new EventHandler(this.t_Tick); // co Interval od startu wywo³aj funkcjie t_Tick
+            button2.Visible = false;
+            button2.Enabled = false;
+        }
+
+        
+        private void openToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                OpenFileDialog ofd = new OpenFileDialog();
+                if (ofd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                oryginal = new Bitmap(ofd.FileName);
+                glob = new Bitmap(ofd.FileName);
+                if (oryginal.Width >= 5000 | oryginal.Height >= 5000)
+                    throw new Exception("Za du¿a szerokoœæ lub wysokoœæ, max 5000 x 5000");
+
+                if (oryginal.Height <= 10 | oryginal.Width <= 10)
+                    throw new Exception("Za ma³y, min 10 x 10");
+                W_skali = 100;
+                pictureBox1.Size = new Size(oryginal.Width, oryginal.Height);
+                pictureBox1.Image = oryginal;
+
+                // œrodek ko³a (cx,cy, promieñ = Radius)
+                if (oryginal.Width >= oryginal.Height) { cx = cy = oryginal.Height / 2; }
+                else { cx = cy = oryginal.Width / 2; }
+                Radius = cx;
+                button2.Visible = true;
+                button2.Enabled = true;
+
+            }
+            catch (Exception ex)
+            { MessageBox.Show(ex.Message); }
+        }
+
+        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (pictureBox1.Image != null)
+            {
+                SaveFileDialog save_file = new SaveFileDialog();
+                if (save_file.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                pictureBox1.Image.Save(save_file.FileName);
+            }
+            else { MessageBox.Show("Mo¿liwoœæ zapisu po uprzednim wyborze zdjêcia"); }
+        }
+
+        private void colorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            ColorDialog MyDialog = new ColorDialog();
+            if (MyDialog.ShowDialog() == DialogResult.OK)
+                BackColor = MyDialog.Color;
+        }
+
+
+        private void convertBitmap2txt()
+        {
+
+            Color p;
+            Bitmap bmp_org = new Bitmap(2 * cx + 1, 2 * cx + 1);
+            bmp2 = (Bitmap)bmp_org.Clone();
+            
+            u = 0;
+            //
+            int N = 30;
+            int off = 10;
+            if (Int32.TryParse(textBox2.Text, out off) == false || off <= 0 || Int32.TryParse(textBox1.Text, out N) == false || N <= 0)
+            {
+                MessageBox.Show("Liczba diod lub offset nieprawid³owe, prosze poprawiæ");
+                textBox1.Text = null; textBox2.Text = null;
+                return;
+            }
+            else
+            {
+                if (off >= N)
+                {
+                    MessageBox.Show("ofset jest wiêkszy ni¿ liczba diod, prosze poprawiæ");
+                    textBox1.Text = null; textBox2.Text = null;
+                    return;
+                }
+                else { N_diod = N; diode_offset = off; }
+            }
+            //
+            int x, y;
+
+            MessageBox.Show("Wybrano zdjêcie. Prosze wybraæ miejsce zapisu bitmapy");
+            SaveFileDialog save_f = new SaveFileDialog();
+            if (save_f.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+            FileStream f = File.Open(save_f.FileName, FileMode.Create);
+            byte[] info;
+            info = new UTF8Encoding(true).GetBytes("uint8_t tablica[] = {");
+            f.Write(info, 0, info.Length);
+
+            for (int kat = 0; kat < 360; kat++)
+            {
+                info = new UTF8Encoding(true).GetBytes("\r\n");
+                f.Write(info, 0, info.Length);
+
+                for (int n = diode_offset; n < N_diod; n++)
+                {
+                    if (kat >= 0 && kat <= 180)
+                    {
+                        x = cx + (int)(Radius * n / N_diod * Math.Sin(Math.PI * kat / 180));
+                        y = cy - (int)(Radius * n / N_diod * Math.Cos(Math.PI * kat / 180));
+                    }
+                    else
+                    {
+                        x = cx - (int)(Radius * n / N_diod * -Math.Sin(Math.PI * kat / 180));
+                        y = cy - (int)(Radius * n / N_diod * Math.Cos(Math.PI * kat / 180));
+                    }
+                    // pobierz info o pixelu
+                    p = oryginal.GetPixel(x, y);
+                    //komponent ARGB -> pobranie wartoœci RGB
+                    int a = p.A;
+                    int r = p.R;
+                    int g = p.G;
+                    int b = p.B;
+                    // ustawianie nowych RGB wartoœci
+                    if (r > 255 / 2)
+                    { r = 255; }
+                    else
+                    { r = 0; }
+
+                    if (g > 255 / 2)
+                    { g = 255; }
+                    else { g = 0; }
+
+                    if (b > 255 / 2)
+                    { b = 255; }
+                    else { b = 0; }
+
+                    //bmp2 jest obrazem ""spróbkowanym""
+                    //bmp2.SetPixel(x, y, Color.FromArgb(a, r, g, b));
+                    // pictureBox2.Image = bmp2;
+
+                    switch (mode)
+                    {
+                        case 1:
+                            info = new UTF8Encoding(true).GetBytes(string.Format("{0},{1},{2},", r == 0 ? '0' : '1', g == 0 ? '0' : '1', b == 0 ? '0' : '1'));
+                            bmp2.SetPixel(x, y, Color.FromArgb(a, r, g, b));
+                            break;
+
+                        case 2:
+                            info = new UTF8Encoding(true).GetBytes(string.Format("{0},", r == 0 ? '0' : '1'));
+                            bmp2.SetPixel(x, y, Color.FromArgb(a, r, 0, 0));
+                            break;
+
+                        case 3:
+                            info = new UTF8Encoding(true).GetBytes(string.Format("{0},", g == 0 ? '0' : '1'));
+                            bmp2.SetPixel(x, y, Color.FromArgb(a, 0, g, 0));
+                            break;
+
+                        case 4:
+                            info = new UTF8Encoding(true).GetBytes(string.Format("{0},", b == 0 ? '0' : '1'));
+                            bmp2.SetPixel(x, y, Color.FromArgb(a, 0, 0, b));
+                            break;
+
+                        default:
+                            break;
+                    }
+                     
+                f.Write(info, 0, info.Length);
+
+                }
+            }
+            info = new UTF8Encoding(true).GetBytes("};\r\n");
+            f.Write(info, 0, info.Length);
+            f.Close();
+           
+        }
+
+        private void t_Tick(object sender, EventArgs e)
+        {
+            int Diameter = 2 * Radius;   
+            Pen p = new Pen(Color.Blue, 1f);
+            Graphics g;
+            if (glob != null)
+            {             
+                g = Graphics.FromImage(glob); }
+            else { return; }
+            int x, y;
+
+            //kordynaty x y 
+            int tu = (u - lim) % 360;
+
+            if (u >= 0 && u <= 180)
+            {
+                //prawa po³ówka plus konwersja z stopni na radiany
+                x = cx + (int)(Radius * Math.Sin(Math.PI * u / 180));
+                y = cy - (int)(Radius * Math.Cos(Math.PI * u / 180));
+            }
+            else
+            {
+                x = cx - (int)(Radius * -Math.Sin(Math.PI * u / 180));
+                y = cy - (int)(Radius * Math.Cos(Math.PI * u / 180));
+            }
+
+            if (tu >= 0 && tu <= 180)
+            {
+                //prawa po³ówka plus konwersja z stopni na radiany
+                tx = cx + (int)(Radius * Math.Sin(Math.PI * tu / 180));
+                ty = cy - (int)(Radius * Math.Cos(Math.PI * tu / 180));
+            }
+            else
+            {
+                tx = cx - (int)(Radius * -Math.Sin(Math.PI * tu / 180));
+                ty = cy - (int)(Radius * Math.Cos(Math.PI * tu / 180));
+            }
+
+            // rysuj okr¹g
+            g.DrawEllipse(p, 0, 0, Diameter, Diameter);
+            g.DrawEllipse(p, 80, 80, Diameter - 160, Diameter - 160);
+            g.DrawEllipse(p, 50, 50, Diameter - 100, Diameter - 100);
+            g.DrawLine(p, new Point(cx, 0), new Point(cx, Diameter)); //góra dó³
+            g.DrawLine(p, new Point(0, cy), new Point(Diameter, cy)); //prawo-lewo
+
+            //g³owica
+            g.DrawLine(new Pen(Color.Black, 1f), new Point(cx, cy), new Point(tx, ty));
+            g.DrawLine(p, new Point(cx, cy), new Point(x, y));
+            pictureBox1.Size = new Size(glob.Width, glob.Height);
+            pictureBox1.Image = glob;
+            glob.SetPixel(x / 8, y / 8, Color.Red);
+            p.Dispose();  //usuñ
+            g.Dispose();
+            //
+            u++;
+            if (u == 360)
+            {
+                u = 0;
+            }
+        }
+
+
+    }
+}
